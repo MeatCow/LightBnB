@@ -17,16 +17,23 @@ const pool = new Pool({
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithEmail = function(email) {
-  let user;
-  for (const userId in users) {
-    user = users[userId];
-    if (user.email.toLowerCase() === email.toLowerCase()) {
-      break;
-    } else {
-      user = null;
-    }
-  }
-  return Promise.resolve(user);
+  return new Promise((resolve, reject) => {
+    pool.query(`
+    SELECT *
+    FROM users
+    WHERE LOWER(email) = LOWER($1)
+    LIMIT 1;
+    `, [email])
+      .then(user => {
+        if (!user) {
+          return resolve(null);
+        }
+        resolve(user.rows[0]);
+      })
+      .catch(error => {
+        reject(error);
+      });
+  });
 };
 exports.getUserWithEmail = getUserWithEmail;
 
@@ -36,7 +43,23 @@ exports.getUserWithEmail = getUserWithEmail;
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithId = function(id) {
-  return Promise.resolve(users[id]);
+  return new Promise((resolve, reject) => {
+    pool.query(`
+    SELECT *
+    FROM users
+    WHERE id = $1
+    LIMIT 1;
+    `, [id])
+      .then(user => {
+        if (!user) {
+          return resolve(null);
+        }
+        resolve(user.rows[0]);
+      })
+      .catch(error => {
+        reject(error);
+      });
+  });
 };
 exports.getUserWithId = getUserWithId;
 
@@ -47,10 +70,28 @@ exports.getUserWithId = getUserWithId;
  * @return {Promise<{}>} A promise to the user.
  */
 const addUser = function(user) {
-  const userId = Object.keys(users).length + 1;
-  user.id = userId;
-  users[userId] = user;
-  return Promise.resolve(user);
+  return new Promise((resolve, reject) => {
+    if (!user.email || !user.name || !user.password) {
+      reject('Missing user information');
+    }
+    pool.query(`
+    INSERT INTO users(name, email, password)
+    VALUES ($1, $2, $3)
+    RETURNING *;
+    `, [user.name, user.email, user.password])
+      .then(user => {
+        if (!user) {
+          return resolve(null);
+        }
+        resolve(user.rows[0]);
+      })
+      .catch(error => {
+        if (error.code === "23505") {
+          return reject('User with this email already exists');
+        }
+        reject(error);
+      });
+  });
 };
 exports.addUser = addUser;
 
